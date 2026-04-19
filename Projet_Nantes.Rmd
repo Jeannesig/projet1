@@ -1,0 +1,242 @@
+---
+title: "Projet_Nantes"
+author: "moi"
+date: "2026-04-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# Charger les données IRIS 
+iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+
+# Vérifier que les données sont bien chargées
+head(iris)  # Affiche les 6 premières lignes
+summary(iris)  # Résumé des données
+# Afficher la carte avec les noms des IRIS au survol
+mapview(iris,
+        zcol = "NOM_IRIS",       # Colonne à afficher au survol
+        color = "blue",          # Couleur des contours
+        layer.name = "IRIS de Nantes",  # Nom de la couche
+        cex = 0.7)               # Taille du texte (ajustez si besoin)
+library(sf)
+library(dplyr)
+library(mapview)
+
+# Charger les IRIS 
+iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+
+# Filtrer Nantes (44109) et Carquefou (44033)
+iris_nantes_carquefou <- iris %>%
+  filter(NOM_COM %in% c("Nantes", "Carquefou"))
+
+# Vérifier
+table(iris_nantes_carquefou$NOM_COM)  # Doit afficher ~120 IRIS pour Nantes et ~20 pour Carquefou
+
+```
+```{r}
+# 1. Charger les packages
+library(sf)
+library(dplyr)
+library(mapview)
+
+# 2. Charger les données IRIS
+iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+
+# 3. Filtrer Nantes et Carquefou
+iris_nantes_carquefou <- iris %>%
+  filter(NOM_COM %in% c("Nantes", "Carquefou"))
+
+# 4. VÉRIFICATIONS 
+nrow(iris_nantes_carquefou)  # Doit retourner 104
+table(iris_nantes_carquefou$NOM_COM)  # Nantes: 97, Carquefou: 7
+
+# 5. Afficher la carte filtrée
+mapview(
+  iris_nantes_carquefou,
+  zcol = "NOM_IRIS",
+  col.regions = ifelse(iris_nantes_carquefou$NOM_COM == "Nantes", "blue", "red")
+)
+```
+```{r}
+# 1. Charger les packages
+library(sf)
+library(dplyr)
+
+# 2. Importer les carreaux Filosofi
+filosofi <- st_read("Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp")
+
+# 3. Vérifier les données
+head(filosofi)
+names(filosofi)
+
+# 4. Filtrer pour Nantes et Carquefou (avec les IRIS)
+filosofi_nantes_carquefou <- st_join(
+  filosofi,
+  st_transform(iris_nantes_carquefou, st_crs(filosofi)),
+  join = st_intersects
+)
+
+# 5. Afficher une carte
+plot(st_geometry(filosofi_nantes_carquefou), col = "lightgreen", main = "Carreaux Filosofi à Nantes et Carquefou")
+```
+```{r}
+# Charger les packages nécessaires
+library(sf)       # Pour les données spatiales
+library(dplyr)    # Pour manipuler les données
+
+# Chemin vers le fichier .shp 
+chemin_filosofi <- "C:/Users/jeanne/Documents/Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp"
+
+# Importer les données
+filosofi <- st_read(chemin_filosofi)
+
+# Afficher un résumé des données
+filosofi
+```
+```{r}
+# =============================================
+# CARTE DES REVENUS PAR IRIS - SCRIPT COMPLET
+
+# =============================================
+
+# 1. Chargement des packages (à exécuter une seule fois)
+if (!require("leaflet")) install.packages("leaflet")
+if (!require("RColorBrewer")) install.packages("RColorBrewer")
+if (!require("sf")) install.packages("sf")
+
+library(leaflet)
+library(RColorBrewer)
+library(sf)
+
+# 2. Préparation des données (à adapter à votre dataframe)
+filosofi_clean$revenu <- filosofi_clean$ind * 1000  # Conversion en euros
+
+# 3. Définition des seuils et couleurs
+seuils <- c(50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000)
+couleurs <- c("#7F2704", "#F46D43", "#FDAE61", "#FEE08B", "#D9EF8B", "#A6D96A", "#66BD63", "#2B8350")
+# 4. Création de la palette de couleurs
+rm(palette_revenu)  # Supprime d'abord l'ancienne version
+palette_revenu <- colorBin(
+  palette = couleurs,  # Sans rev()
+  domain = filosofi_clean$revenu,
+  bins = c(-Inf, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, Inf),
+  na.color = "grey"
+)
+
+# 5. Création de la carte
+ma_carte <- leaflet(filosofi_clean) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    fillColor = ~palette_revenu(revenu),
+    color = "white",
+    weight = 1,
+    fillOpacity = 0.7,
+ popup = ~paste0("<b>IRIS:</b> ", filosofi_clean[[1]])
+  ) %>%
+  addLegend(
+    position = "bottomleft",
+    pal = palette_revenu,
+    values = ~revenu,
+    title = "Revenu médian (€)",
+    opacity = 1,
+   labels = c(
+  "400 000 € et plus",
+  "350 000 - 400 000 €",
+  "300 000 - 350 000 €",
+  "250 000 - 300 000 €",
+  "200 000 - 250 000 €",
+  "150 000 - 200 000 €",
+  "100 000 - 150 000 €",
+  "50 000 - 100 000 €",
+  "Inf - 50 000 €"
+)
+  )
+
+# 6. Affichage de la carte
+ma_carte
+
+```
+
+
+
+```{r}
+# 1. Charger les bibliothèques nécessaires
+library(sf)
+library(dplyr)
+
+# 2. Charger les données IRIS avec vérification
+iris <- st_read("C:/Users/Jeanne/Documents/Projet_Nantes/donnees/IRIS/CONTOURS-IRIS.shp") %>%
+  filter(grepl("^44109|^44035", CODE_IRIS)) %>%
+  st_transform(2154)  # Forcer le CRS Lambert-93 immédiatement
+
+# 3. Créer le centre-ville 
+centre_ville <- st_sf(
+  id = 1,
+  geometry = st_sfc(st_point(c(355150, 6689000)), crs = 2154)
+)
+
+# 4. Vérification CRUCIALE des dimensions
+if(nrow(iris) == 0) stop
+if(st_crs(iris) != st_crs(centre_ville)) stop("CRS différents - transformation nécessaire")
+
+# 5. Solution pour l'erreur "length(x) == length(y)"
+# Extraire la géométrie du centre-ville comme un objet sfc simple
+centre_geom <- st_geometry(centre_ville)
+
+# 6. Calculer la distance avec une méthode alternative
+iris <- iris %>%
+  mutate(distance_centre = as.numeric(st_distance(geometry, centre_geom)))
+
+# 7. Vérifier les résultats
+summary(iris$distance_centre)
+top_5_proches <- head(iris %>% arrange(distance_centre) %>% select(CODE_IRIS, distance_centre))
+print(top_5_proches)
+
+# 8. Visualisation pour confirmation
+plot(st_geometry(iris), col = "lightgrey")
+plot(centre_ville, col = "red", add = TRUE)
+title("Localisation du centre-ville (point rouge)")
+
+
+```
+
+
+```{r}
+install.packages("sf")        # Pour les données spatiales
+install.packages("dplyr")     # Pour manipuler les données
+install.packages("ggplot2")   # Pour les visualisations
+install.packages("viridis")   # Pour les palettes de couleurs
+
+```
+
+
+
+
+
+
+
+
