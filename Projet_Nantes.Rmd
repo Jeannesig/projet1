@@ -231,6 +231,7 @@ install.packages("dplyr")     # Pour manipuler les données
 install.packages("ggplot2")   # Pour les visualisations
 install.packages("viridis")   # Pour les palettes de couleurs
 
+gg
 ```
 
 
