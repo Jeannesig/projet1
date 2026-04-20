@@ -9,54 +9,28 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
-```{r}
-# Charger les données IRIS 
-iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+# Périurbanisation et inégalités socio-spatiales dans l’aire urbaine de Nantes
 
-# Vérifier que les données sont bien chargées
-head(iris)  # Affiche les 6 premières lignes
-summary(iris)  # Résumé des données
-# Afficher la carte avec les noms des IRIS au survol
-mapview(iris,
-        zcol = "NOM_IRIS",       # Colonne à afficher au survol
-        color = "blue",          # Couleur des contours
-        layer.name = "IRIS de Nantes",  # Nom de la couche
-        cex = 0.7)               # Taille du texte (ajustez si besoin)
-library(sf)
-library(dplyr)
-library(mapview)
+## Introduction
 
-# Charger les IRIS 
-iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+La métropolisation et l'étalement urbain sont des dynamiques majeures qui reconfigurent les espaces urbains français depuis plusieurs décennies. L'aire urbaine de Nantes, deuxième agglomération de l'Ouest français avec près de 650 000 habitants dans sa commune centre, n'échappe pas à ce phénomène. La périurbanisation y a profondément redessiné la géographie sociale du territoire, redistribuant les populations selon leurs revenus entre le centre-ville et les communes périphériques. Dans ce contexte, la question des inégalités socio-spatiales se pose avec force : la distance au centre structure-t-elle les niveaux de richesse et de pauvreté ? À Nantes même, les inégalités sont marquées : les quartiers ouest et nord concentrent les ménages les plus aisés, tandis que des secteurs comme Nantes Nord ou Bellevue affichent des taux de pauvreté dépassant 30%. En périphérie, des communes comme Carquefou, située à une dizaine de kilomètres au nord-est du centre-ville, affichent un revenu médian disponible par unité de consommation parmi les plus élevés de la métropole, suggérant une géographie sociale qui dépasse les seules limites communales de Nantes. Ce projet, réalisé dans le cadre du cours de Systèmes d'Information Géographique de L3 Géographie et Aménagement à Sorbonne Université, mobilise des outils d'analyse spatiale sous R pour répondre à la question suivante : dans quelle mesure la distance au centre-ville de Nantes structure-t-elle les inégalités de richesse et de pauvreté entre la ville-centre et sa périphérie périurbaine ?
 
-# Filtrer Nantes (44109) et Carquefou (44033)
-iris_nantes_carquefou <- iris %>%
-  filter(NOM_COM %in% c("Nantes", "Carquefou"))
+## Présentation des données utilisées
 
-# Vérifier
-table(iris_nantes_carquefou$NOM_COM)  # Doit afficher ~120 IRIS pour Nantes et ~20 pour Carquefou
+Contours IRIS – IGN (2024) Les contours IRIS constituent notre première source de données. Produits par l'Institut national de l'information géographique et forestière (IGN) et disponibles sur le portail cartes.gouv.fr, ils découpent le territoire français en unités géographiques infra-communales appelées IRIS (Îlots Regroupés pour l'Information Statistique). Chaque IRIS regroupe en moyenne 2 000 habitants, ce qui en fait une maille fine et pertinente pour analyser les inégalités socio-spatiales à l'échelle locale. Dans notre projet, ces contours servent de fond géographique principal pour cartographier les revenus au sein de Nantes et Carquefou.
 
-```
+Carreaux 200m Filosofi – INSEE Les carreaux Filosofi de 200 mètres de côté sont produits par l'INSEE à partir du dispositif Fichier Localisé Social et Fiscal (Filosofi). Ils fournissent des indicateurs socio-économiques géolocalisés — dont le revenu médian disponible par unité de consommation — sur une grille régulière de 200 m. Cette granularité très fine permet de s'affranchir des découpages administratifs et d'observer les contrastes de richesse et de pauvreté au sein même des communes. Dans notre projet, ces carreaux sont essentiels pour mesurer les inégalités de revenus et les mettre en relation avec la distance au centre de Nantes.
+
+Admin Express – IGN Les données Admin Express, également produites par l'IGN et disponibles sur cartes.gouv.fr, fournissent les limites administratives officielles des communes françaises en shapefile, en projection IGNF:LAMB93. Elles nous permettent de délimiter précisément les périmètres des communes de Nantes et Carquefou, d'en extraire les contours pour les superposer aux autres couches et de structurer notre zone d'étude. C'est la donnée de référence pour cadrer l'ensemble de notre analyse spatiale.
+
+# écrire le titre du I
+
+## Carte 1 : Iirs de Nantes et Carquefou
+
+Le premier espace de codage sert à importer les IRIS de Nantes et de Carquefou, par un filtrage. Cette première carte sert à localiser l'espace sur lequel porte notre étude. Les IRIS de Nnates sont en bleus et ceux de Carquefou en rouge
+
 ```{r}
 # 1. Charger les packages
 library(sf)
@@ -64,7 +38,7 @@ library(dplyr)
 library(mapview)
 
 # 2. Charger les données IRIS
-iris <- st_read("donnees/IRIS/CONTOURS-IRIS.shp")
+iris <- st_read("C:/Users/jeanne/Documents/Projet_Nantes/donnees/IRIS/CONTOURS-IRIS.shp")
 
 # 3. Filtrer Nantes et Carquefou
 iris_nantes_carquefou <- iris %>%
@@ -81,163 +55,320 @@ mapview(
   col.regions = ifelse(iris_nantes_carquefou$NOM_COM == "Nantes", "blue", "red")
 )
 ```
+
+## Carte 2 : Géotraitement vecteur 1
+
+Une opération de délimitation (clip) a été réalisée avec la fonction st_intersection() du package sf pour découper les carreaux Filosofi 200m de l'INSEE sur les contours des communes de Nantes et Carquefou. Les deux couches ont d'abord été reprojetées en Lambert 93 (EPSG:2154). Le résultat est une couche allégée et délimitée précisément à la zone d'étude, sur laquelle s'affichent les IRIS (en rouge pour Carquefou, en bleu pour Nantes) ainsi que les carreaux Filosofi colorés selon le nombre d'individus qu'ils contiennent. On observe une forte densité de population au centre de Nantes et une densité plus faible à Carquefou, conformément à la structure urbaine de l'agglomération.
+
 ```{r}
 # 1. Charger les packages
 library(sf)
 library(dplyr)
+library(mapview)
 
-# 2. Importer les carreaux Filosofi
-filosofi <- st_read("Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp")
+# 2. Charger les données IRIS
+iris <- st_read("C:/Users/jeanne/Documents/Projet_Nantes/donnees/IRIS/CONTOURS-IRIS.shp")
 
-# 3. Vérifier les données
-head(filosofi)
-names(filosofi)
+# 3. Filtrer Nantes et Carquefou
+iris_nantes_carquefou <- iris %>%
+  filter(NOM_COM %in% c("Nantes", "Carquefou")) %>%
+  st_transform(2154)
 
-# 4. Filtrer pour Nantes et Carquefou (avec les IRIS)
-filosofi_nantes_carquefou <- st_join(
-  filosofi,
-  st_transform(iris_nantes_carquefou, st_crs(filosofi)),
-  join = st_intersects
+# 4. VÉRIFICATIONS 
+nrow(iris_nantes_carquefou)        # 104
+table(iris_nantes_carquefou$NOM_COM)
+
+# ============================================
+# GÉOTRAITEMENT VECTEUR : DÉLIMITATION (CLIP)
+# ============================================
+
+# 5. Fusionner les IRIS pour obtenir le contour de chaque commune
+communes <- iris_nantes_carquefou %>%
+  group_by(NOM_COM) %>%
+  summarise(geometry = st_union(geometry))
+
+# 6. Charger les carreaux Filosofi
+filosofi <- st_read("C:/Users/jeanne/Documents/Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp") %>%
+  st_transform(2154)
+
+# 7. DÉLIMITATION : découper les carreaux sur les limites communales
+filosofi_clip <- st_intersection(filosofi, communes)
+
+# 8. Afficher la carte interactive avec IRIS + carreaux découpés
+mapview(iris_nantes_carquefou,
+        zcol = "NOM_COM",
+        col.regions = c("red", "blue"),
+        alpha.regions = 0.3,
+        layer.name = "IRIS") +
+  mapview(filosofi_clip,
+          zcol = "ind",
+          layer.name = "Carreaux Filosofi (délimités)")
+```
+
+##### Schéma de géotraitement de cette opération
+
+[Carreaux Filosofi 200m] [IRIS Nantes + Carquefou] \| \| st_transform() st_union() EPSG:2154 Masque de découpe \| \| +----------+-----------------+ \| st_intersection() CLIP \| [Carreaux délimités Nantes + Carquefou]
+
+## Carte 3 : distribution spatiale des revenus médians annuels à l'échelle des carreaux de 200m Filosofi
+
+Cette deuxième carte représente la distribution spatiale des revenus médians annuels à l'échelle des carreaux de 200m, issus des données Filosofi (INSEE). Chaque carreau est coloré selon le revenu moyen par individu, calculé en divisant la somme des niveaux de vie par le nombre d'individus. La palette de couleurs va du rouge (revenus faibles, 12 000 - 15 000 €/an) au vert foncé (revenus élevés, 36 000 - 43 000 €/an), permettant d'identifier rapidement les inégalités territoriales au sein de l'agglomération.Cette carte permet notamment de : repérer les zones de précarité (carreaux rouges/oranges), identifier les quartiers aisés (carreaux verts) pour observer des effets de ségrégation spatiale à fine échelle.
+
+```{r}
+library(sf)
+library(dplyr)
+library(leaflet)
+
+# ============================================
+# 1. CHARGER ET PRÉPARER LES IRIS
+# ============================================
+iris <- st_read("C:/Users/Jeanne/Documents/Projet_Nantes/donnees/IRIS/CONTOURS-IRIS.shp")
+
+iris_nantes_carquefou <- iris %>%
+  filter(NOM_COM %in% c("Nantes", "Carquefou")) %>%
+  st_transform(2154)
+
+# Polygone EXACT des deux communes (pas un rectangle)
+zone_exacte <- st_union(iris_nantes_carquefou)
+
+# ============================================
+# 2. CHARGER FILOSOFI (bbox pour pré-filtrer vite)
+# ============================================
+bbox_zone <- zone_exacte %>%
+  st_buffer(200) %>%
+  st_bbox() %>%
+  st_as_sfc()
+
+filosofi_raw <- st_read(
+  "C:/Users/Jeanne/Documents/Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp",
+  wkt_filter = st_as_text(bbox_zone)
 )
 
-# 5. Afficher une carte
-plot(st_geometry(filosofi_nantes_carquefou), col = "lightgreen", main = "Carreaux Filosofi à Nantes et Carquefou")
-```
-```{r}
-# Charger les packages nécessaires
-library(sf)       # Pour les données spatiales
-library(dplyr)    # Pour manipuler les données
+# ============================================
+# 3. FILTRER EXACTEMENT DANS LES COMMUNES
+# ============================================
+filosofi_clean <- filosofi_raw %>%
+  st_transform(2154) %>%
+  st_filter(zone_exacte, .predicate = st_intersects) %>%  # filtre exact
+  filter(ind > 0) %>%
+  mutate(revenu = ind_snv / ind) %>%
+  st_transform(4326)  # WGS84 pour Leaflet
 
-# Chemin vers le fichier .shp 
-chemin_filosofi <- "C:/Users/jeanne/Documents/Projet_Nantes/donnees/Filosofi/carreaux_200m_met.shp"
+nrow(filosofi_clean)
+summary(filosofi_clean $ revenu)
 
-# Importer les données
-filosofi <- st_read(chemin_filosofi)
+# ============================================
+# 4. PALETTE CORRIGÉE
+# ============================================
 
-# Afficher un résumé des données
-filosofi
-```
-```{r}
-# =============================================
-# CARTE DES REVENUS PAR IRIS - SCRIPT COMPLET
+seuils <- c(12000, 15000, 18000, 21000, 24000, 27000, 30000, 36000, 43000)
+couleurs <- c("#d73027", "#f46d43", "#fdae61", "#fee08b",
+              "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850")
 
-# =============================================
-
-# 1. Chargement des packages (à exécuter une seule fois)
-if (!require("leaflet")) install.packages("leaflet")
-if (!require("RColorBrewer")) install.packages("RColorBrewer")
-if (!require("sf")) install.packages("sf")
-
-library(leaflet)
-library(RColorBrewer)
-library(sf)
-
-# 2. Préparation des données (à adapter à votre dataframe)
-filosofi_clean$revenu <- filosofi_clean$ind * 1000  # Conversion en euros
-
-# 3. Définition des seuils et couleurs
-seuils <- c(50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000)
-couleurs <- c("#7F2704", "#F46D43", "#FDAE61", "#FEE08B", "#D9EF8B", "#A6D96A", "#66BD63", "#2B8350")
-# 4. Création de la palette de couleurs
-rm(palette_revenu)  # Supprime d'abord l'ancienne version
 palette_revenu <- colorBin(
-  palette = couleurs,  # Sans rev()
-  domain = filosofi_clean$revenu,
-  bins = c(-Inf, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, Inf),
+  palette  = couleurs,
+  domain   = filosofi_clean$revenu,
+  bins     = seuils,
   na.color = "grey"
 )
 
-# 5. Création de la carte
-ma_carte <- leaflet(filosofi_clean) %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addPolygons(
-    fillColor = ~palette_revenu(revenu),
-    color = "white",
-    weight = 1,
-    fillOpacity = 0.7,
- popup = ~paste0("<b>IRIS:</b> ", filosofi_clean[[1]])
-  ) %>%
-  addLegend(
-    position = "bottomleft",
-    pal = palette_revenu,
-    values = ~revenu,
-    title = "Revenu médian (€)",
-    opacity = 1,
-   labels = c(
-  "400 000 € et plus",
-  "350 000 - 400 000 €",
-  "300 000 - 350 000 €",
-  "250 000 - 300 000 €",
-  "200 000 - 250 000 €",
-  "150 000 - 200 000 €",
-  "100 000 - 150 000 €",
-  "50 000 - 100 000 €",
-  "Inf - 50 000 €"
+legende_html <- paste0(
+  "<b>Revenu médian (€/an)</b><br>",
+  "<i style='background:#d73027;width:12px;height:12px;display:inline-block'></i> 12 000 - 15 000 €<br>",
+  "<i style='background:#f46d43;width:12px;height:12px;display:inline-block'></i> 15 000 - 18 000 €<br>",
+  "<i style='background:#fdae61;width:12px;height:12px;display:inline-block'></i> 18 000 - 21 000 €<br>",
+  "<i style='background:#fee08b;width:12px;height:12px;display:inline-block'></i> 21 000 - 24 000 €<br>",
+  "<i style='background:#d9ef8b;width:12px;height:12px;display:inline-block'></i> 24 000 - 27 000 €<br>",
+  "<i style='background:#a6d96a;width:12px;height:12px;display:inline-block'></i> 27 000 - 30 000 €<br>",
+  "<i style='background:#66bd63;width:12px;height:12px;display:inline-block'></i> 30 000 - 36 000 €<br>",
+  "<i style='background:#1a9850;width:12px;height:12px;display:inline-block'></i> 36 000 - 43 000 €<br>"
 )
+
+# ============================================
+# 6. CARTE LEAFLET
+# ============================================
+
+leaflet(filosofi_clean) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addControl(
+    html = "<b style='font-size:16px'>Carte des revenus médians par carreau</b>",
+    position = "topleft"
+  ) %>%
+  addPolygons(
+    fillColor   = ~palette_revenu(revenu),
+    color       = "white",
+    weight      = 0.3,
+    fillOpacity = 0.8,
+    popup = ~paste0(
+      "<b>Revenu moyen :</b> ", round(revenu, 0), " €/an<br>",
+      "<b>Individus :</b> ", ind
+    )
+  ) %>%
+  addControl(
+    html     = legende_html,
+    position = "bottomright"
   )
-
-# 6. Affichage de la carte
-ma_carte
-
 ```
 
+## Carte 4 : Jointure des Iris et des carreaux filosifi : obtenir le revenu médian par IRIS
 
+Cette carte représente le revenu moyen par IRIS à Nantes et Carquefou, obtenu en rattachant spatialement chaque carreau Filosofi à son IRIS d'appartenance, puis en agrégeant les revenus par individu. On observe une forte disparité entre Carquefou, commune périurbaine aisée affichant des revenus élevés (vert foncé, autour de 28 000 à 32 000 €/an), et certains quartiers du sud et de l'ouest de Nantes où les revenus sont nettement plus faibles (rouge/orange, autour de 16 000 à 20 000 €/an). Nantes présente ainsi une ségrégation socio-spatiale marquée, avec des poches de précarité en périphérie sud qui contrastent avec des niveaux de revenus plus intermédiaires au centre et à l'est de la ville.
 
 ```{r}
-# 1. Charger les bibliothèques nécessaires
 library(sf)
 library(dplyr)
 
-# 2. Charger les données IRIS avec vérification
-iris <- st_read("C:/Users/Jeanne/Documents/Projet_Nantes/donnees/IRIS/CONTOURS-IRIS.shp") %>%
-  filter(grepl("^44109|^44035", CODE_IRIS)) %>%
-  st_transform(2154)  # Forcer le CRS Lambert-93 immédiatement
+# ============================================
+# 1. REMETTRE EN LAMBERT 93 (même CRS)
+# ============================================
+iris_L93 <- iris_nantes_carquefou %>%
+  st_transform(2154)
 
-# 3. Créer le centre-ville 
-centre_ville <- st_sf(
-  id = 1,
-  geometry = st_sfc(st_point(c(355150, 6689000)), crs = 2154)
-)
+filosofi_L93 <- filosofi_clean %>%
+  st_transform(2154)
 
-# 4. Vérification CRUCIALE des dimensions
-if(nrow(iris) == 0) stop
-if(st_crs(iris) != st_crs(centre_ville)) stop("CRS différents - transformation nécessaire")
+# ============================================
+# 2. JOINTURE SPATIALE
+# ============================================
+jointure <- st_join(filosofi_L93, iris_L93, join = st_intersects)
 
-# 5. Solution pour l'erreur "length(x) == length(y)"
-# Extraire la géométrie du centre-ville comme un objet sfc simple
-centre_geom <- st_geometry(centre_ville)
+# ============================================
+# 3. AGRÉGATION PAR IRIS
+# ============================================
+revenu_par_iris <- jointure %>%
+  st_drop_geometry() %>%
+  group_by(CODE_IRIS) %>%
+  summarise(
+    revenu_moyen = sum(ind_snv) / sum(ind),
+    nb_individus = sum(ind),
+    nb_carreaux  = n()
+  )
 
-# 6. Calculer la distance avec une méthode alternative
-iris <- iris %>%
-  mutate(distance_centre = as.numeric(st_distance(geometry, centre_geom)))
+# ============================================
+# 4. JOINDRE AU SHAPEFILE IRIS
+# ============================================
+iris_enrichi <- iris_L93 %>%
+  left_join(revenu_par_iris, by = "CODE_IRIS")
 
-# 7. Vérifier les résultats
-summary(iris$distance_centre)
-top_5_proches <- head(iris %>% arrange(distance_centre) %>% select(CODE_IRIS, distance_centre))
-print(top_5_proches)
+summary(iris_enrichi$revenu_moyen)
+nrow(iris_enrichi)
 
-# 8. Visualisation pour confirmation
-plot(st_geometry(iris), col = "lightgrey")
-plot(centre_ville, col = "red", add = TRUE)
-title("Localisation du centre-ville (point rouge)")
+## Carte 3 : Revenu moyen par IRIS
 
+library(ggplot2)
+
+ggplot(iris_enrichi) +
+  geom_sf(aes(fill = revenu_moyen), color = "white", size = 0.2) +
+  scale_fill_gradientn(
+    name    = "Revenu moyen (€/an)",
+    colours = c("#d73027", "#fdae61", "#fee08b", "#a6d96a", "#1a9850"),
+    labels  = scales::comma
+  ) +
+  labs(
+    title    = "Revenu moyen par IRIS à Nantes et Carquefou",
+    subtitle = "Source : Filosofi INSEE, jointure spatiale carreaux → IRIS",
+    caption  = "Lambert 93 - 2019"
+  ) +
+  theme_minimal()
 
 ```
 
+## Carte 5 : Géotraitement vecteur 2
+
+Afin de répondre à notre problématique sur le lien entre distance au centre et niveau de richesse, nous avons calculé la distance euclidienne entre le centroïde de chaque IRIS et le centre-ville de Nantes, matérialisé par la Place du Commerce. Pour cela, nous avons d'abord créé un point géographique correspondant à cette place, puis utilisé la fonction st_distance() du package sf pour calculer la distance en mètres entre chaque centroïde d'IRIS et ce point central. En parallèle, nous avons généré quatre zones concentriques (buffers) de 1, 5, 10 et 15 kilomètres autour de ce même point grâce à la fonction st_buffer(). La carte obtenue permet de visualiser clairement le gradient de distance depuis le centre. Les IRIS les plus proches de la Place du Commerce apparaissent en violet foncé, tandis que les IRIS plus éloignés tendent vers le jaune. On observe que la grande majorité des IRIS de Nantes se situent dans un rayon de 5 à 8 kilomètres du centre. Carquefou, visible en jaune en haut à droite de la carte, se situe entre 8 000 et 12 000 mètres du centre, ce qui confirme son statut de commune périurbaine. Cette variable de distance constituera la base de notre analyse croisée avec les données de revenus pour tester l'hypothèse d'un gradient social centre-périphérie.
 
 ```{r}
-install.packages("sf")        # Pour les données spatiales
-install.packages("dplyr")     # Pour manipuler les données
-install.packages("ggplot2")   # Pour les visualisations
-install.packages("viridis")   # Pour les palettes de couleurs
+library(sf)
+library(mapview)
 
-gg
+# 1. Créer le point central (Place du Commerce, Nantes)
+centre_nantes <- st_sfc(st_point(c(-1.5534, 47.2141)), crs = 4326) %>%
+  st_transform(2154)
+
+# 2. Calculer la distance de chaque IRIS au centre
+iris_nantes_carquefou$distance_centre <- st_distance(
+  st_centroid(iris_nantes_carquefou),
+  centre_nantes
+) %>% as.numeric()
+
+# 3. Créer les buffers concentriques (1km, 5km, 10km, 15km)
+buffer_1km  <- st_buffer(centre_nantes, 1000)
+buffer_5km  <- st_buffer(centre_nantes, 5000)
+buffer_10km <- st_buffer(centre_nantes, 10000)
+buffer_15km <- st_buffer(centre_nantes, 15000)
+
+# 4. Carte des distances
+mapview(iris_nantes_carquefou, 
+        zcol = "distance_centre",
+        layer.name = "Distance au centre (m)") +
+  mapview(buffer_1km,  col.regions = "red",    alpha.regions = 0.1, layer.name = "1km") +
+  mapview(buffer_5km,  col.regions = "orange", alpha.regions = 0.1, layer.name = "5km") +
+  mapview(buffer_10km, col.regions = "yellow", alpha.regions = 0.1, layer.name = "10km") +
+  mapview(buffer_15km, col.regions = "green",  alpha.regions = 0.1, layer.name = "15km") +
+  mapview(centre_nantes, col.regions = "red", layer.name = "Centre Nantes")
+
+```
+
+##### Schéma de géotraitement de cette opération
+
+[IRIS Nantes + Carquefou] [Point Place du Commerce] \| \| st_centroid() st_buffer() Centroïdes IRIS Zones 1/5/10/15km \| \| +----------+-----------------+ \| st_distance() \| [Colonne distance_centre + Carte choroplèthe]
+
+## Croisement des données : revenu moyen par IRIS et distance au centre de Nantes
+
+Pour cette carte, nous avons calculé la distance entre le centroïde de chaque IRIS et le centre-ville de Nantes, matérialisé par la Place du Commerce. Des cercles concentriques ont ensuite été générés automatiquement tous les 2 km, de 2 à 16 km, afin de créer des zones de référence spatiale permettant de visualiser l'évolution des revenus en fonction de l'éloignement au centre. Chaque IRIS est coloré selon un gradient rouge-vert, où le rouge représente les revenus les plus faibles (autour de 16 000 €/an) et le vert les revenus les plus élevés (autour de 32 000 €/an).
+
+L'analyse de la carte révèle une structure spatiale contrastée et non linéaire. Le centre-ville immédiat (dans le premier cercle de 2 km) affiche des revenus intermédiaires à modestes, ce qui reflète la mixité sociale traditionnelle des quartiers denses du cœur urbain. En s'éloignant vers la périphérie, on observe une forte hétérogénéité : certains IRIS situés entre 4 et 8 km présentent des revenus très faibles (rouge marqué), correspondant probablement à des quartiers prioritaires ou des zones de logements sociaux. À l'inverse, la commune de Carquefou, située au nord-est et bien au-delà du cercle des 10 km, se distingue nettement avec des revenus parmi les plus élevés de la zone d'étude (vert foncé), illustrant le phénomène de périurbanisation des ménages aisés qui s'installent en grande couronne tout en restant dans l'aire d'attraction de Nantes.
+
+```{r}
+# Créer les cercles tous les 2 km de 2 à 16 km
+distances_km <- seq(2, 16, by = 2)
+
+buffers_list <- lapply(distances_km, function(d) {
+  st_buffer(centre_nantes, dist = d * 1000)
+})
+
+# Récupérer les limites de la zone des IRIS
+bbox_iris <- st_bbox(iris_enrichi)
+
+ggplot() +
+  geom_sf(data = iris_enrichi, aes(fill = revenu_moyen), color = "white", size = 0.1) +
+  
+  # Gradient vert-rouge
+  scale_fill_gradientn(
+    colors = c("#d73027", "#f46d43", "#fdae61", "#fee08b", "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850"),
+    name = "Revenu moyen (€/an)",
+    breaks = c(16000, 20000, 24000, 28000, 32000),
+    labels = c("16 000", "20 000", "24 000", "28 000", "32 000")
+  ) +
+  
+  # Ajouter tous les cercles en boucle
+  lapply(buffers_list, function(buf) {
+    geom_sf(data = buf, fill = NA, color = "black", linetype = "dashed", size = 0.5)
+  }) +
+  
+  # Point centre
+  geom_sf(data = centre_nantes, color = "black", size = 4, shape = 4) +
+  
+  # Rogner la vue
+  coord_sf(
+    xlim = c(bbox_iris["xmin"] - 0.02, bbox_iris["xmax"] + 0.02),
+    ylim = c(bbox_iris["ymin"] - 0.02, bbox_iris["ymax"] + 0.02)
+  ) +
+  
+  labs(
+    title = "Revenu moyen par IRIS et distance au centre de Nantes",
+    subtitle = "Cercles concentriques tous les 2 km depuis le centre-ville",
+    caption = "Source : Filosofi INSEE"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(face = "bold", size = 13),
+    plot.subtitle = element_text(size = 10, color = "grey40"),
+    legend.position = "right"
+  )
+
+
 ```
 
 
 
-
-
-
-
-
+##
