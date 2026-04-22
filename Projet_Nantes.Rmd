@@ -107,7 +107,22 @@ mapview(iris_nantes_carquefou,
 
 ##### Schéma de géotraitement de cette opération
 
-[Carreaux Filosofi 200m] [IRIS Nantes + Carquefou] \| \| st_transform() st_union() EPSG:2154 Masque de découpe \| \| +----------+-----------------+ \| st_intersection() CLIP \| [Carreaux délimités Nantes + Carquefou]
+ENTRÉE
+CONTOURS-IRIS.shp (tous les IRIS de France)
+↓
+Filtrage — Sélection de Nantes et Carquefou uniquement
+↓
+Reprojection — Lambert 93 (EPSG:2154)
+↓
+Dissolution — Fusion des IRIS par commune → contours communaux
+↓
+Chargement — Carreaux Filosofi 200m + reprojection Lambert 93
+↓
+Découpe (Clip) — Intersection des carreaux sur les limites communales
+↓
+SORTIE
+Carte interactive (mapview) — IRIS colorés par commune + carreaux Filosofi découpés
+
 
 ## Carte 3 : distribution spatiale des revenus médians annuels à l'échelle des carreaux de 200m Filosofi
 
@@ -310,7 +325,19 @@ mapview(iris_nantes_carquefou,
 
 ##### Schéma de géotraitement de cette opération
 
-[IRIS Nantes + Carquefou] [Point Place du Commerce] \| \| st_centroid() st_buffer() Centroïdes IRIS Zones 1/5/10/15km \| \| +----------+-----------------+ \| st_distance() \| [Colonne distance_centre + Carte choroplèthe]
+ENTRÉE
+iris_nantes_carquefou (polygones IRIS)
+↓
+Point central — Place du Commerce, Nantes (WGS84 → Lambert 93)
+↓
+Centroïdes — Conversion des polygones IRIS en points
+↓
+Calcul de distance — Distance euclidienne centroïde → point central (en mètres)
+↓
+Buffers concentriques — Zones circulaires à 1km, 5km, 10km, 15km autour du centre
+↓
+SORTIE
+Carte interactive (mapview) — IRIS colorés par distance + anneaux concentriques + point central
 
 ## Croisement des données : revenu moyen par IRIS et distance au centre de Nantes
 
@@ -371,4 +398,272 @@ ggplot() +
 
 
 
-##
+# ajouter titre du III
+
+
+## carte 7 : géotraitement Raster 1: Interpolation spatiale du revenu médian (IDW)
+
+```{r}
+library(sf)
+library(terra)
+library(dplyr)
+
+# ============================================
+# 1. PRÉPARER LES CENTROÏDES AVEC REVENU
+# ============================================
+
+# Centroïdes des IRIS enrichis avec revenu moyen
+centroides <- iris_enrichi %>%
+  filter(!is.na(revenu_moyen)) %>%
+  st_centroid() %>%
+  st_transform(2154)
+
+# Extraire coordonnées
+coords <- st_coordinates(centroides)
+valeurs <- centroides$revenu_moyen
+
+# ============================================
+# 2. CRÉER LA GRILLE RASTER DE BASE
+# ============================================
+
+# Emprise de la zone d'étude
+bbox_zone <- st_bbox(iris_enrichi)
+
+# Créer un raster vide (résolution 200m comme Filosofi)
+raster_vide <- rast(
+  xmin = bbox_zone["xmin"],
+  xmax = bbox_zone["xmax"],
+  ymin = bbox_zone["ymin"],
+  ymax = bbox_zone["ymax"],
+  resolution = 200,
+  crs = "EPSG:2154"
+)
+
+# ============================================
+# 3. INTERPOLATION IDW
+# ============================================
+
+library(gstat)
+library(sp)
+
+# Convertir en SpatialPointsDataFrame pour gstat
+centroides_sp <- as(centroides["revenu_moyen"], "Spatial")
+
+# Créer une grille de points correspondant au raster
+grille <- expand.grid(
+  x = seq(bbox_zone["xmin"], bbox_zone["xmax"], by = 200),
+  y = seq(bbox_zone["ymin"], bbox_zone["ymax"], by = 200)
+)
+
+# Vérifier que x et y sont bien numériques
+grille$x <- as.numeric(grille$x)
+grille$y <- as.numeric(grille$y)
+
+# Assigner les coordonnées
+coordinates(grille) <- ~x+y
+proj4string(grille) <- proj4string(centroides_sp)
+
+# Interpolation IDW (puissance 2)
+idw_result <- idw(
+  formula  = revenu_moyen ~ 1,
+  locations = centroides_sp,
+  newdata  = grille,
+  idp      = 2  # puissance de la pondération
+)
+
+# ============================================
+# 4. CONVERTIR EN RASTER terra
+# ============================================
+
+# Convertir en raster
+library(raster)
+raster_revenu <- raster(extent(idw_result), res = 200)
+proj4string(raster_revenu) <- proj4string(centroides_sp)
+raster_revenu <- rasterize(idw_result, raster_revenu, field = "var1.pred", fun = mean)
+
+# Convertir en SpatRaster pour terra/tidyterra
+raster_revenu <- rast(raster_revenu)
+
+# Masquer en dehors de la zone d'étude
+zone_vect <- vect(st_union(iris_enrichi))
+raster_revenu_masked <- mask(raster_revenu, zone_vect)
+
+# ============================================
+# 5. VISUALISATION
+# ============================================
+
+library(ggplot2)
+library(tidyterra)
+
+ggplot() +
+  geom_spatraster(data = raster_revenu_masked) +
+  scale_fill_gradientn(
+    colors = c("#d73027", "#fdae61", "#fee08b", "#a6d96a", "#1a9850"),
+    name   = "Revenu interpolé (€/an)",
+    na.value = "transparent",
+    labels = scales::comma
+  ) +
+  geom_sf(data = iris_enrichi, fill = NA, color = "white", size = 0.2) +
+  labs(
+    title    = "Surface interpolée du revenu moyen (IDW)",
+    subtitle = "Interpolation par pondération inverse à la distance depuis les centroïdes d'IRIS",
+    caption  = "Source : Filosofi INSEE – Lambert 93"
+  ) +
+  theme_void() +
+  theme(
+    plot.title    = element_text(face = "bold", size = 13),
+    plot.subtitle = element_text(size = 10, color = "grey40"),
+    legend.position = "right"
+  )
+
+```
+
+##### Schéma de Géotraitement Raster 1
+
+ENTRÉE
+iris_enrichi (polygones IRIS + revenu_moyen)
+↓
+Filtrage — Suppression des IRIS sans revenu moyen
+↓
+Centroïdes — Conversion des polygones en points
+↓
+Reprojection — WGS84 → Lambert 93 (EPSG:2154)
+↓
+Extraction — Coordonnées XY + valeurs (revenu_moyen)
+↓
+Grille raster vide — Résolution 200m, emprise de la zone
+↓
+Grille de points — Points réguliers espacés de 200m sur l'emprise
+↓
+Interpolation IDW — Pondération inverse à la distance (puissance = 2)
+↓
+Conversion — Résultat IDW → SpatRaster (terra)
+↓
+Masque — Découpe sur l'union des IRIS
+↓
+SORTIE
+Carte de surface interpolée du revenu moyen
+
+## carte 8 : géotraitement Raster 2 : Carte de densité de population (KDE) :
+
+```{r}
+# ============================================
+# RASTER 2 : DENSITÉ DE POPULATION (KDE)
+# ============================================
+
+library(sf)
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(dplyr)
+library(ks)
+
+# ============================================
+# 1. CENTROÏDES AVEC POPULATION
+# ============================================
+
+centroides_pop <- iris_enrichi %>%
+  filter(!is.na(nb_individus)) %>%
+  st_centroid() %>%
+  st_transform(2154)
+
+# Extraire coordonnées et poids
+coords_pop <- st_coordinates(centroides_pop)
+poids <- centroides_pop$nb_individus
+
+# ============================================
+# 2. CRÉER LE RASTER DE DENSITÉ (KDE)
+# ============================================
+
+# Créer raster vide
+bbox_zone <- st_bbox(st_transform(iris_enrichi, 2154))
+
+raster_pop <- rast(
+  xmin = bbox_zone["xmin"],
+  xmax = bbox_zone["xmax"],
+  ymin = bbox_zone["ymin"],
+  ymax = bbox_zone["ymax"],
+  resolution = 200,
+  crs = "EPSG:2154"
+)
+
+# KDE pondéré par la population
+kde <- kde(
+  x = coords_pop,
+  w = poids / sum(poids),
+  gridsize = c(ncol(raster_pop), nrow(raster_pop)),
+  xmin = c(bbox_zone["xmin"], bbox_zone["ymin"]),
+  xmax = c(bbox_zone["xmax"], bbox_zone["ymax"])
+)
+
+# Convertir en SpatRaster
+raster_kde <- rast(
+  t(kde$estimate),
+  extent = ext(bbox_zone["xmin"], bbox_zone["xmax"],
+               bbox_zone["ymin"], bbox_zone["ymax"]),
+  crs = "EPSG:2154"
+)
+
+# Masquer hors zone
+zone_vect <- vect(st_union(st_transform(iris_enrichi, 2154)))
+raster_kde_masked <- mask(raster_kde, zone_vect)
+
+# ============================================
+# 3. VISUALISATION
+# ============================================
+
+ggplot() +
+  geom_spatraster(data = raster_kde_masked) +
+  geom_sf(data = st_transform(iris_enrichi, 2154),
+          fill = NA, color = "white", linewidth = 0.2, alpha = 0.5) +
+  scale_fill_gradientn(
+  colors = c("#0d0221", "#4b0082", "#9b30ff", "#00ff99", "#ccff00"),
+  na.value = NA,
+  name = "Densité\npopulation"
+)
+   
+  labs(
+    title = "Carte de densité de population (KDE)",
+    subtitle = "Estimation par noyau pondérée par la population des IRIS",
+    caption = "Source : Filosofi INSEE – Lambert 93"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(color = "grey40"),
+    legend.position = "right"
+  )
+
+```
+
+
+
+##### Schéma de Géotraitement Raster 2
+
+
+ENTRÉE
+iris_enrichi (polygones IRIS + nb_individus)
+↓
+Filtrage — Suppression des IRIS sans population
+↓
+Centroïdes — Conversion des polygones en points
+↓
+Reprojection — WGS84 → Lambert 93 (EPSG:2154)
+↓
+Extraction — Coordonnées XY + poids (nb_individus)
+↓
+Grille raster vide — Résolution 200m, emprise de la zone
+↓
+KDE pondéré — Estimation par noyau, poids = population
+↓
+Conversion — Matrice KDE → SpatRaster
+↓
+Masque — Découpe sur l'union des IRIS
+↓
+SORTIE
+Carte de densité de population (KDE)
+
+
+
+
+# Conclusion
